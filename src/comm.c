@@ -760,22 +760,36 @@ void game_loop(socket_t local_mother_desc)
   gettimeofday(&last_time, (struct timezone *) 0);
 
   /* The Main Loop.  The Big Cheese.  The Top Dog.  The Head Honcho.  The.. */
-  while (!circle_shutdown) {
+  while (!circle_shutdown) 
+  {
 
     /* Sleep if we don't have any connections */
-    if (descriptor_list == NULL) {
+    if (descriptor_list == NULL) 
+    {
       log("No connections.  Going to sleep.");
       FD_ZERO(&input_set);
       FD_SET(local_mother_desc, &input_set);
-      if (select(local_mother_desc + 1, &input_set, (fd_set *) 0, (fd_set *) 0, NULL) < 0) {
-	if (errno == EINTR)
-	  log("Waking up to process signal.");
-	else
-	  perror("SYSERR: Select coma");
-      } else
-	log("New connection.  Waking up.");
+
+      if (select(local_mother_desc + 1, &input_set, (fd_set *) 0, (fd_set *) 0, NULL) < 0) 
+      {
+	      if (errno == EINTR)
+	      {
+          log("Waking up to process signal.");
+        }
+	      else
+	      {
+          perror("SYSERR: Select coma");
+        }
+      } 
+      else
+      {
+        log("New connection.  Waking up.");
+      }
       gettimeofday(&last_time, (struct timezone *) 0);
     }
+
+
+
     /* Set up the input, output, and exception sets for select(). */
     FD_ZERO(&input_set);
     FD_ZERO(&output_set);
@@ -783,15 +797,23 @@ void game_loop(socket_t local_mother_desc)
     FD_SET(local_mother_desc, &input_set);
 
     maxdesc = local_mother_desc;
-    for (d = descriptor_list; d; d = d->next) {
+    
+    for (d = descriptor_list; d; d = d->next) 
+    {
+
 #ifndef CIRCLE_WINDOWS
       if (d->descriptor > maxdesc)
-	maxdesc = d->descriptor;
+      {
+	      maxdesc = d->descriptor;
+      }
 #endif
+
       FD_SET(d->descriptor, &input_set);
       FD_SET(d->descriptor, &output_set);
       FD_SET(d->descriptor, &exc_set);
+
     }
+
 
     /* At this point, we have completed all input, output and heartbeat
      * activity from the previous iteration, so we have to put ourselves
@@ -803,9 +825,12 @@ void game_loop(socket_t local_mother_desc)
 
     /* If we were asleep for more than one pass, count missed pulses and sleep
      * until we're resynchronized with the next upcoming pulse. */
-    if (process_time.tv_sec == 0 && process_time.tv_usec < OPT_USEC) {
+    if (process_time.tv_sec == 0 && process_time.tv_usec < OPT_USEC)
+    {
       missed_pulses = 0;
-    } else {
+    } 
+    else 
+    {
       missed_pulses = process_time.tv_sec * PASSES_PER_SEC;
       missed_pulses += process_time.tv_usec / OPT_USEC;
       process_time.tv_sec = 0;
@@ -821,25 +846,33 @@ void game_loop(socket_t local_mother_desc)
     timediff(&timeout, &last_time, &now);
 
     /* Go to sleep */
-    do {
+    do 
+    {      
       circle_sleep(&timeout);
       gettimeofday(&now, (struct timezone *) 0);
       timediff(&timeout, &last_time, &now);
     } while (timeout.tv_usec || timeout.tv_sec);
 
     /* Poll (without blocking) for new input, output, and exceptions */
-    if (select(maxdesc + 1, &input_set, &output_set, &exc_set, &null_time) < 0) {
+    if (select(maxdesc + 1, &input_set, &output_set, &exc_set, &null_time) < 0) 
+    {
       perror("SYSERR: Select poll");
       return;
     }
+
     /* If there are new connections waiting, accept them. */
     if (FD_ISSET(local_mother_desc, &input_set))
+    {
       new_descriptor(local_mother_desc);
+    }
 
     /* Kick out the freaky folks in the exception set and marked for close */
-    for (d = descriptor_list; d; d = next_d) {
+    for (d = descriptor_list; d; d = next_d) 
+    {
       next_d = d->next;
-      if (FD_ISSET(d->descriptor, &exc_set)) {
+
+      if (FD_ISSET(d->descriptor, &exc_set)) 
+      {
         FD_CLR(d->descriptor, &input_set);
 	      FD_CLR(d->descriptor, &output_set);
 	      close_socket(d);
@@ -847,73 +880,110 @@ void game_loop(socket_t local_mother_desc)
     }
 
     /* Process descriptors with input pending */
-    for (d = descriptor_list; d; d = next_d) {
+    for (d = descriptor_list; d; d = next_d) 
+    {
       next_d = d->next;
+
       if (FD_ISSET(d->descriptor, &input_set))
-       {
+      {
         if ( d->pProtocol != NULL )      /* KaVir's plugin */
+        {
           d->pProtocol->WriteOOB = 0;    /* KaVir's plugin */
+        }
+
 	      if (process_input(d) < 0)
+        {
 	        close_socket(d);
-       }
+        }
+      }
     }
 
     /* Process commands we just read from process_input */
-    for (d = descriptor_list; d; d = next_d) {
+    for (d = descriptor_list; d; d = next_d) 
+    {
       next_d = d->next;
 
       /* Not combined to retain --(d->wait) behavior. -gg 2/20/98 If no wait
        * state, no subtraction.  If there is a wait state then 1 is subtracted.
        * Therefore we don't go less than 0 ever and don't require an 'if'
        * bracket. -gg 2/27/99 */
-      if (d->character) {
+      if (d->character) 
+      {
         GET_WAIT_STATE(d->character) -= (GET_WAIT_STATE(d->character) > 0);
 
         if (GET_WAIT_STATE(d->character))
+        {
           continue;
+        }
       }
 
       if (!get_from_q(&d->input, comm, &aliased))
+      {
         continue;
-
-      if (d->character) {
-	/* Reset the idle timer & pull char back from void if necessary */
-	d->character->char_specials.timer = 0;
-	if (STATE(d) == CON_PLAYING && GET_WAS_IN(d->character) != NOWHERE) {
-	  if (IN_ROOM(d->character) != NOWHERE)
-	    char_from_room(d->character);
-	  char_to_room(d->character, GET_WAS_IN(d->character));
-	  GET_WAS_IN(d->character) = NOWHERE;
-	  act("$n has returned.", TRUE, d->character, 0, 0, TO_ROOM);
-	}
-        GET_WAIT_STATE(d->character) = 1;
       }
+
+      if (d->character) 
+      {
+	      /* Reset the idle timer & pull char back from void if necessary */
+	      d->character->char_specials.timer = 0;
+	      if (STATE(d) == CON_PLAYING && GET_WAS_IN(d->character) != NOWHERE) 
+        {
+	        if (IN_ROOM(d->character) != NOWHERE)
+	        { 
+            char_from_room(d->character);
+          }
+	          char_to_room(d->character, GET_WAS_IN(d->character));
+	          GET_WAS_IN(d->character) = NOWHERE;
+	          act("$n has returned.", TRUE, d->character, 0, 0, TO_ROOM);
+        }
+        
+      GET_WAIT_STATE(d->character) = 1;
+      }
+      
       d->has_prompt = FALSE;
 
       if (d->showstr_count) /* Reading something w/ pager */
-	show_string(d, comm);
+	    {  
+        show_string(d, comm);
+      }
       else if (d->str)		/* Writing boards, mail, etc. */
-	string_add(d, comm);
+	    {
+        string_add(d, comm);
+      }
       else if (STATE(d) != CON_PLAYING) /* In menus, etc. */
-	nanny(d, comm);
-      else {			/* else: we're playing normally. */
-	if (aliased)		/* To prevent recursive aliases. */
-	  d->has_prompt = TRUE;	/* To get newline before next cmd output. */
-	else if (perform_alias(d, comm, sizeof(comm)))    /* Run it through aliasing system */
-	  get_from_q(&d->input, comm, &aliased);
-	command_interpreter(d->character, comm); /* Send it to interpreter */
+	    {
+        nanny(d, comm);
+      }
+      else 
+      {			/* else: we're playing normally. */
+	      if (aliased)		/* To prevent recursive aliases. */
+	      {
+          d->has_prompt = TRUE;	/* To get newline before next cmd output. */
+        } else if (perform_alias(d, comm, sizeof(comm)))    /* Run it through aliasing system */
+	      { 
+          get_from_q(&d->input, comm, &aliased);
+        }
+
+	    command_interpreter(d->character, comm); /* Send it to interpreter */
       }
     }
 
     /* Send queued output out to the operating system (ultimately to user). */
-    for (d = descriptor_list; d; d = next_d) {
+    for (d = descriptor_list; d; d = next_d) 
+    {
       next_d = d->next;
-      if (*(d->output) && FD_ISSET(d->descriptor, &output_set)) {
-	/* Output for this player is ready */
-	if (process_output(d) < 0)
-	  close_socket(d);
-	else
-	  d->has_prompt = 1;
+      
+      if (*(d->output) && FD_ISSET(d->descriptor, &output_set)) 
+      {
+	      /* Output for this player is ready */
+	      if (process_output(d) < 0)
+        {
+	        close_socket(d);
+        }
+	      else
+        {
+	        d->has_prompt = 1;
+        }
       }
     }
 
